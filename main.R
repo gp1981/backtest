@@ -298,3 +298,105 @@ final_results_formatted <- final_results %>%
 write_xlsx(final_results_formatted, output_file_path)
 
 cat("\nProcessing complete! Output saved to:", output_file_path, "\n")
+
+# --- Chart Generation ----
+# --- Multi-facet Chart Generation ---
+
+# 1. Prepare the data for plotting
+# Pivot the data from wide to long format for easier plotting with facets
+plot_data <- final_results_formatted %>%
+  pivot_longer(
+    cols = c(`Total Return 12M`, `Total Return 24M`, `Total Return 36M`, 
+             `Total Return 48M`, `Total Return 60M`, `Total Return Up-to-Date`),
+    names_to = "Period",
+    values_to = "Total_Return"
+  ) %>%
+  mutate(
+    # Reorder the facets for a logical progression
+    Period = factor(Period, levels = c(
+      "Total Return 12M", "Total Return 24M", "Total Return 36M", "Total Return 48M",
+      "Total Return 60M", "Total Return Up-to-Date"
+    ))
+  ) %>%
+  # Filter out NA values, which are investments that have not reached the full period
+  filter(!is.na(Total_Return))
+
+# 2. Generate the multi-facet histogram chart
+total_return_chart <- ggplot(plot_data, aes(x = Total_Return, fill = `Color Code`)) +
+  geom_histogram(
+    bins = 15,
+    alpha = 0.6,
+    position = "identity",
+    color = "black",
+    linewidth = 0.5
+  ) +
+  facet_wrap(~ Period, scales = "free_x", ncol = 2) +
+  scale_fill_manual(values = c("Green", "Yellow")) +
+  labs(
+    title = "Distribution of Total Returns Over Time",
+    subtitle = "Faceted by Investment Holding Period",
+    x = "Total Return (as a decimal)",
+    y = "Count of Tickers",
+    fill = "Ticker Group"
+  ) +
+  theme_minimal() +
+  theme(
+    legend.position = "bottom",
+    plot.title = element_text(face = "bold", hjust = 0.5),
+    plot.subtitle = element_text(hjust = 0.5),
+    strip.text = element_text(face = "bold")
+  )
+
+# 1. Prepare the data for plotting
+# Pivot the data from wide to long format for easier plotting with facets
+plot_data <- final_results_formatted %>%
+  pivot_longer(
+    cols = c(`CAGR 12M`, `CAGR 24M`, `CAGR 36M`, 
+             `CAGR 48M`, `CAGR 60M`, `CAGR Up-to-Date`),
+    names_to = "Period",
+    values_to = "CAGR"
+  ) %>%
+  mutate(
+    # Reorder the facets for a logical progression
+    Period = factor(Period, levels = c(
+      "CAGR 12M", "CAGR 24M", "CAGR 36M", "CAGR 48M",
+      "CAGR 60M", "CAGR Up-to-Date"
+    ))
+  ) %>%
+  # Filter out NA values, which are investments that have not reached the full period
+  filter(!is.na(CAGR))
+
+# 2. Generate the multi-facet histogram chart
+CAGR_chart <- ggplot(plot_data, aes(x = CAGR, fill = `Color Code`)) +
+  geom_histogram(
+    bins = 15,
+    alpha = 0.6,
+    position = "identity",
+    color = "black",
+    linewidth = 0.5
+  ) +
+  facet_wrap(~ Period, scales = "free_x", ncol = 2) +
+  scale_fill_manual(values = c("Green", "Yellow")) +
+  labs(
+    title = "Distribution of CAGR Over Time",
+    subtitle = "Faceted by Investment Holding Period",
+    x = "CAGR (as a decimal)",
+    y = "Count of Tickers",
+    fill = "Ticker Group"
+  ) +
+  theme_minimal() +
+  theme(
+    legend.position = "bottom",
+    plot.title = element_text(face = "bold", hjust = 0.5),
+    plot.subtitle = element_text(hjust = 0.5),
+    strip.text = element_text(face = "bold")
+  )
+
+# Display the chart
+print(CAGR_chart)
+
+# Optional: Save the chart to a file
+# ggsave("Returns_Histogram_Chart.png", chart, width = 10, height = 8, units = "in")
+
+# Optional: Make the chart interactive with plotly
+# ggplotly(chart)
