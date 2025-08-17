@@ -96,10 +96,18 @@ for (i in 1:nrow(input_data)) {
   
   # --- Future Market Cap Processing ---
   
-  # Define the 5-year period for which to fetch future data
+  # Define the end date as today, or 5 years from purchase, whichever is sooner.
   start_date <- purchase_date
-  end_date <- purchase_date + years(5)
-
+  end_date <- Sys.Date()
+  
+  # Initialize variables for the results
+  latest_mkt_cap <- NA
+  latest_date <- as.Date(NA)
+  total_dividends <- NA
+  holding_period_years <- NA
+  total_return <- NA
+  overall_cagr <- NA
+  
   # Fetch the market cap data for the entire 5-year period at once
   market_cap_data <- get_market_cap(ticker, start_date, end_date, api_key)
   
@@ -110,17 +118,41 @@ for (i in 1:nrow(input_data)) {
     # Calculate the market cap at 12, 24, 36, 48, 60 months
     mkt_cap_periods <- map_dbl(c(12, 24, 36, 48, 60), function(months) {
       target_date <- purchase_date %m+% months(months)
+      
+      # If the target date is in the future, return NA immediately.
+      if (target_date > Sys.Date()) {
+        return(NA_real_)
+      }
+      
       # Find the first available market cap on or after the target date
       future_market_cap <- market_cap_data %>%
         filter(date >= target_date) %>%
         arrange(date) %>%
         slice(1) %>%
         pull(marketCap)
-      # If no data is found for the future date, return NA
+      
+      # If no data is found (e.g., data gap), return NA
       if (length(future_market_cap) == 0) NA else future_market_cap
     })
+    
+    # NEW: Separately, get the most up-to-date market cap value and its date
+    uptodate_data <- market_cap_data %>%
+      filter(date <= Sys.Date()) %>% # Get all data up to and including today
+      arrange(desc(date)) %>%        # Sort by most recent date first
+      slice(1)                       # Take the top one
+    
+    if (nrow(uptodate_data) > 0) {
+      mkt_cap_uptodate <- uptodate_data$marketCap
+      latest_date <- uptodate_data$date # Correctly set latest_date here
+    } else {
+      mkt_cap_uptodate <- NA_real_
+      latest_date <- as.Date(NA) # Set to NA if no up-to-date data
+    }
+    
   } else {
     mkt_cap_periods <- rep(NA, 5)
+    mkt_cap_uptodate <- NA_real_ # Ensure this is also NA if no data exists
+    latest_date <- as.Date(NA)   # Ensure this is also NA if no data exists
   }
   
   # --- Dividend Processing ---
@@ -137,6 +169,11 @@ for (i in 1:nrow(input_data)) {
       period_start_date <- purchase_date %m+% months(12 * year_offset)
       period_end_date <- purchase_date %m+% months(12 * (year_offset + 1))
       
+      # Return NA for future periods
+      if(period_start_date > Sys.Date()){
+        return(NA_real_)
+      }
+      
       dividend_sum <- dividend_data %>%
         filter(date > period_start_date & date <= period_end_date) %>%
         summarise(total_dividends = sum(netDividendsPaid, na.rm = TRUE)) %>%
@@ -146,11 +183,23 @@ for (i in 1:nrow(input_data)) {
       # We make them positive for our calculation
       abs(dividend_sum)
     })
+    
+    # NEW: Separately, get the total cumulative dividends up to the current date
+    dividends_uptodate <- dividend_data %>%
+      filter(date > purchase_date & date <= Sys.Date()) %>%
+      summarise(total_dividends = sum(abs(netDividendsPaid), na.rm = TRUE)) %>%
+      pull(total_dividends)
+    
+    if(length(dividends_uptodate) == 0) {
+      dividends_uptodate <- 0
+    }
+    
   } else {
     dividend_periods_annual <- rep(NA, 5)
+    dividends_uptodate <- 0 # Default to 0 if no dividend data is found
   }
 
-  # --- Total Return & CAGR Calculation ---
+  # --- Total Return & CAGR Calculation ----
   
   # Calculate cumulative dividends for total return calculation
   dividend_periods_cumulative <- cumsum(dividend_periods_annual)
@@ -169,31 +218,66 @@ for (i in 1:nrow(input_data)) {
     (total_return_periods[5])^(1/5) - 1
   )
   
-  # --- Store the results ---
+  # --- Up-to-Date Calculation ---
+  
+  # Initialize up-to-date variables
+  holding_period_years <- NA
+  total_return_uptodate <- NA
+  cagr_uptodate <- NA
+  
+  # latest_date should be available from your market cap calculation
+  # It is the date of the 'mkt_cap_uptodate' value.
+  if (!is.na(latest_date) && !is.na(mkt_cap_uptodate)) {
+    
+    # Calculate the precise holding period in years
+    holding_period_years <- as.numeric(latest_date - purchase_date) / 365.25
+    
+    # Calculate Total Return on Investment up-to-date
+    total_return_uptodate <- (mkt_cap_uptodate + dividends_uptodate) / initial_mkt_cap
+    
+    # Calculate CAGR up-to-date, checking for a valid holding period
+    if (holding_period_years > 0) {
+      cagr_uptodate <- (total_return_uptodate)^(1 / holding_period_years) - 1
+    }
+  }
+  # --- Store the results ----
   
   # Create a tibble of the new results
   new_data <- tibble(
     `Initial MktCap` = initial_mkt_cap,
+    `Holding Period (Years)` = holding_period_years,
+    
+    # Periodic Market Cap
     `MktCap after 12M` = mkt_cap_periods[1],
     `MktCap after 24M` = mkt_cap_periods[2],
     `MktCap after 36M` = mkt_cap_periods[3],
     `MktCap after 48M` = mkt_cap_periods[4],
     `MktCap after 60M` = mkt_cap_periods[5],
+    `MktCap Up-to-Date` = mkt_cap_uptodate,
+    
+    # Annual Dividends
     `Dividends 0-12M` = dividend_periods_annual[1],
     `Dividends 12-24M` = dividend_periods_annual[2],
     `Dividends 24-36M` = dividend_periods_annual[3],
     `Dividends 36-48M` = dividend_periods_annual[4],
     `Dividends 48-60M` = dividend_periods_annual[5],
+    `Dividends Up-to-Date` = dividends_uptodate,
+    
+    # Periodic Total Return & CAGR
     `Total Return 12M` = total_return_periods[1],
     `Total Return 24M` = total_return_periods[2],
     `Total Return 36M` = total_return_periods[3],
     `Total Return 48M` = total_return_periods[4],
     `Total Return 60M` = total_return_periods[5],
+    `Total Return Up-to-Date` = total_return_uptodate,
+    
     `CAGR 12M` = cagr_periods[1],
     `CAGR 24M` = cagr_periods[2],
     `CAGR 36M` = cagr_periods[3],
     `CAGR 48M` = cagr_periods[4],
-    `CAGR 60M` = cagr_periods[5]
+    `CAGR 60M` = cagr_periods[5],
+    `CAGR Up-to-Date` = cagr_uptodate
+    
   )
   
   # Combine the original data from that row with the new data
