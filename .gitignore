@@ -19,7 +19,8 @@
 /*.Rcheck/
 
 # RStudio files
-.Rproj.user/
+*.Rproj
+*.Rproj.user/
 
 # produced vignettes
 vignettes/*.html
@@ -32,9 +33,14 @@ vignettes/*.pdf
 *_cache/
 /cache/
 
+# html output & other files
+*.html
+*.code-workspace
+
 # Temporary files created by R markdown
 *.utf8.md
 *.knit.md
+*.DS_Store
 
 # R Environment Variables
 .Renviron
@@ -48,3 +54,4 @@ po/*~
 # RStudio Connect folder
 rsconnect/
 *.Rproj
+.Rproj.user
